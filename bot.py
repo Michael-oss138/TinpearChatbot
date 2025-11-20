@@ -1,24 +1,40 @@
+import os
 import csv
-import sqlite3 
+import sqlite3
 from datetime import datetime
 from telegram import Update
-from telegram.txt import Updater, MessageHandler, CallbackContext, CommandHandler
+from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, CallbackContext
+from dotenv import load_dotenv
+load_dotenv()
 
-TOKEN = "BOT_TOKEN"
- 
+
+TOKEN = os.getenv("BOT_TOKEN")
+
 import google.generativeai as genai
-genai.configure(api_key = "API_KEY")
-model = genai.GenerativeModel("gemini-1.5-flash")
+genai.configure(api_key=os.getenv("API_KEY"))
 
-def llmaccess(prompt):
+available_models = genai.list_models()
+model_name = None
+for m in available_models:
+    if "generateContent" in getattr(m, "supported_generation_methods", []):
+        model_name = m.name
+        break
+
+if not model_name:
+    raise RuntimeError("No compatible Gemini model found for generateContent.")
+
+model = genai.GenerativeModel(model_name)
+print(f"Using Gemini model: {model_name}")
+
+def ask_ai(prompt):
     try:
         response = model.generate_content(prompt)
-        return response.txt
+        return response.text
     except Exception as e:
-        return f" AI Error: {e}"
+        return f"AI Error: {e}"
 
-DB_FILE = messages.db
-CSV_FILE = messages.csv
+DB_FILE = "messages.db"
+CSV_FILE = "messages.csv"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -34,7 +50,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def savemessages(username, text):
+def save_message(username, text):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute(
@@ -44,7 +60,7 @@ def savemessages(username, text):
     conn.commit()
     conn.close()
 
-def exportdbtocsv():
+def export_to_csv():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM messages")
@@ -56,12 +72,12 @@ def exportdbtocsv():
         writer.writerow(["id", "username", "text", "timestamp"])
         writer.writerows(rows)
 
-def savemessages(update: Update, context: CallbackContext):
+def save_only(update: Update, context: CallbackContext):
     user = update.message.from_user
     text = update.message.text
     save_message(user.username, text)
 
-def aiaccess(update: Update, context: CallbackContext):
+def ai_command(update: Update, context: CallbackContext):
     prompt = " ".join(context.args)
 
     if not prompt:
@@ -71,7 +87,7 @@ def aiaccess(update: Update, context: CallbackContext):
     answer = ask_ai(prompt)
     update.message.reply_text(answer)
 
-def exportcommand(update: Update, context: CallbackContext):
+def export_command(update: Update, context: CallbackContext):
     export_to_csv()
     with open(CSV_FILE, "rb") as f:
         update.message.reply_document(f, filename=CSV_FILE)
@@ -86,7 +102,7 @@ def main():
     dp.add_handler(CommandHandler("ai", ai_command))
     dp.add_handler(CommandHandler("export", export_command))
 
-    print("Bot is running silenty. Use /ai to triggerr AI.")
+    print("Bot is running... Use /ai to ask Gemini anything.")
     updater.start_polling()
     updater.idle()
 
