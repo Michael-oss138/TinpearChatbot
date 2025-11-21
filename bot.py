@@ -12,13 +12,10 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 API_KEY = os.getenv("API_KEY")
 
-print("BOT_TOKEN:", TOKEN)
-print("API_KEY:", API_KEY[:10], "...")  
-
 if not TOKEN:
     raise ValueError("ERROR: BOT_TOKEN is missing in your .env file")
 
-if not API_KEY:
+if not API_KEY or not API_KEY.startswith("gsk_"):
     raise ValueError("ERROR: API_KEY is missing in your .env file")
 
 client = Groq(api_key=API_KEY)
