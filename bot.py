@@ -5,36 +5,28 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, CallbackContext
 from dotenv import load_dotenv
+from groq import Groq
+
 load_dotenv()
 
-
 TOKEN = os.getenv("BOT_TOKEN")
+API_KEY = os.getenv("API_KEY")
 
-import google.generativeai as genai
-genai.configure(api_key=os.getenv("API_KEY"))
+print("BOT_TOKEN:", TOKEN)
+print("API_KEY:", API_KEY[:10], "...")  
 
-available_models = genai.list_models()
-model_name = None
-for m in available_models:
-    if "generateContent" in getattr(m, "supported_generation_methods", []):
-        model_name = m.name
-        break
+if not TOKEN:
+    raise ValueError("ERROR: BOT_TOKEN is missing in your .env file")
 
-if not model_name:
-    raise RuntimeError("No compatible Gemini model found for generateContent.")
+if not API_KEY:
+    raise ValueError("ERROR: API_KEY is missing in your .env file")
 
-model = genai.GenerativeModel(model_name)
-print(f"Using Gemini model: {model_name}")
-
-def ask_ai(prompt):
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"AI Error: {e}"
+client = Groq(api_key=API_KEY)
 
 DB_FILE = "messages.db"
 CSV_FILE = "messages.csv"
+
+
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -50,6 +42,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def save_message(username, text):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -59,6 +52,7 @@ def save_message(username, text):
     )
     conn.commit()
     conn.close()
+
 
 def export_to_csv():
     conn = sqlite3.connect(DB_FILE)
@@ -72,10 +66,29 @@ def export_to_csv():
         writer.writerow(["id", "username", "text", "timestamp"])
         writer.writerows(rows)
 
+
+
+def ask_ai(prompt):
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a helpful Telegram bot assistant."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        return response.choices[0].message.content
+
+    except Exception as e:
+        return f"AI Error: {e}"
+
+
+
 def save_only(update: Update, context: CallbackContext):
     user = update.message.from_user
     text = update.message.text
     save_message(user.username, text)
+
 
 def ai_command(update: Update, context: CallbackContext):
     prompt = " ".join(context.args)
@@ -87,10 +100,13 @@ def ai_command(update: Update, context: CallbackContext):
     answer = ask_ai(prompt)
     update.message.reply_text(answer)
 
+
 def export_command(update: Update, context: CallbackContext):
     export_to_csv()
     with open(CSV_FILE, "rb") as f:
         update.message.reply_document(f, filename=CSV_FILE)
+
+
 
 def main():
     init_db()
@@ -99,12 +115,14 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, save_only))
+
     dp.add_handler(CommandHandler("ai", ai_command))
     dp.add_handler(CommandHandler("export", export_command))
 
-    print("Bot is running... Use /ai to ask Gemini anything.")
+    print("Bot is running with GROQ... Use /ai to ask the bot.")
     updater.start_polling()
     updater.idle()
+
 
 if __name__ == "__main__":
     main()
