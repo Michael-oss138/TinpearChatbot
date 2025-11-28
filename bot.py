@@ -7,6 +7,7 @@ from telegram.ext import Updater, MessageHandler, Filters, CommandHandler, Callb
 from dotenv import load_dotenv
 from groq import Groq
 
+
 load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
